@@ -34,10 +34,12 @@ class TableMap {
             _name = table.name();
             _without_row_id = table.without_row_id();
         } else {
-            _name = _class.getSimpleName().toLowerCase();
             _without_row_id = false;
         }
-
+        if (_name == null || _name.equals(""))
+            _name = _class.getSimpleName().toLowerCase();
+        if (_name == null || _name.equals(""))
+            throw new IllegalStateException("Could not resolve table name");
         Class checked = _class;
         while (checked != null && checked != Object.class) {
             Field[] fields = checked.getDeclaredFields();
@@ -54,7 +56,7 @@ class TableMap {
                 keys.add(column);
                 if (!column.get_declaration().contains(" INTEGER "))
                     column.auto_increment = false;
-            }else {
+            } else {
                 column.auto_increment = false;
             }
         }
@@ -77,6 +79,4 @@ class TableMap {
             Collections.sort(indexed_columns);
         return indexed_columns;
     }
-
-
 }

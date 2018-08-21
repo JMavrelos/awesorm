@@ -29,10 +29,13 @@ class TableCondition {
     }
 
     public String build() {
-        String built = _field;
+        String built = "`" + _field + "`";
         switch (_type) {
+            case lk:
+                built += " like ";
+                break;
             case bt:
-                return _field + " between  " + _value.toString() + " and " + _second_value.toString();
+                return built + " between  " + _value.toString() + " and " + _second_value.toString();
             case dt:
                 built += " <> ";
                 break;
@@ -70,6 +73,8 @@ class TableCondition {
             case gte:
             case bg:
             case eg:
+            case lk:
+            case in:
                 return 1;
             case bt:
                 return 2;

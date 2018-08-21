@@ -16,7 +16,7 @@ public class SQLiteConnection implements Closeable {
     private static final String TAG = SQLiteConnection.class.getSimpleName();
     private static final HashMap<String, TableMap> Mappings = new HashMap<>();
     IDBConnection connection;
-    private Exception _last_error;
+    Exception _last_error;
 
     SQLiteConnection(Context context, String database, String password) {
         if (password == null || password.isEmpty()) {
@@ -167,7 +167,7 @@ public class SQLiteConnection implements Closeable {
         connection.execSQL(true, sql.toString(), null);
     }
 
-    synchronized TableMap get_mapping(Class c) {
+    private synchronized TableMap get_mapping(Class c) {
         String key = c.getName();
         if (Mappings.containsKey(key)) {
             return Mappings.get(key);
@@ -179,7 +179,7 @@ public class SQLiteConnection implements Closeable {
     }
 
     public <T> TableQuery<T> from(Class<T> cl) {
-        return new TableQuery<T>(cl, get_mapping(cl), connection);
+        return new TableQuery<T>(cl, get_mapping(cl), this);
     }
 
     public void begin_transaction() {

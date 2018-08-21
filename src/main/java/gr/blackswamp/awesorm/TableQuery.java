@@ -9,18 +9,18 @@ import java.util.List;
 import java.util.UUID;
 
 
-@SuppressWarnings("unused")
+@SuppressWarnings({"unused", "SameParameterValue", "WeakerAccess", "UnusedReturnValue"})
 public class TableQuery<T> {
     private static final String TAG = "TableQuery";
     private final TableMap _mapping;
-    private final IDBConnection _con;
+    private final SQLiteConnection _con;
     private final Class<T> _class;
     private final List<TableCondition> _conditions = new ArrayList<>();
     private final List<TableOrder> _order = new ArrayList<>();
     private int _skip = 0;
     private int _take = -1;
 
-    TableQuery(Class<T> cl, TableMap mapping, IDBConnection con) {
+    TableQuery(Class<T> cl, TableMap mapping, SQLiteConnection con) {
         _class = cl;
         _mapping = mapping;
         _con = con;
@@ -38,11 +38,27 @@ public class TableQuery<T> {
         return this;
     }
 
+    public TableQuery<T> in(String field, String query_field, TableQuery in_query) {
+        StringBuilder sql = new StringBuilder("select `").append(query_field).append("` from `").append(in_query._mapping._name).append("` ");
+        //from building
+        in_query.apply_where(sql);
+        //order by
+        in_query.apply_order(sql);
+        //limit
+        in_query.apply_limit(sql);
+        return in(field, sql.toString());
+    }
+
     public TableQuery<T> in(String field, String query) {
         query = query.trim();
         if (!query.startsWith("(")) query = "(" + query;
         if (!query.endsWith(")")) query = query + ")";
         _conditions.add(new TableCondition(TableConditionType.in, field, query, false));
+        return this;
+    }
+
+    public TableQuery<T> like(String field, String value) {
+        _conditions.add(new TableCondition(TableConditionType.lk, field, value, true));
         return this;
     }
 
@@ -373,7 +389,8 @@ public class TableQuery<T> {
     }
 
     public List<T> from_query(String query) {
-        try (Cursor c = _con.rawQuery(false, query, null)) {
+        _con.reset_last_error();
+        try (Cursor c = _con.connection.rawQuery(false, query, null)) {
             List<T> items = new ArrayList<>();
             if (c.moveToFirst()) {
                 do {
@@ -383,6 +400,7 @@ public class TableQuery<T> {
             }
             return items;
         } catch (Exception e) {
+            _con._last_error = e;
             e.printStackTrace();
             return null;
         }
@@ -409,13 +427,30 @@ public class TableQuery<T> {
         apply_limit(sql);
 
         Log.d(TAG, "query:" + sql.toString());
-        try (Cursor c = _con.rawQuery(false, sql.toString(), null)) {
+        _con.reset_last_error();
+        try (Cursor c = _con.connection.rawQuery(false, sql.toString(), null)) {
             if (!c.moveToFirst())
                 return null;
             return create_item(c);
         } catch (Exception e) {
+            _con._last_error = e;
             e.printStackTrace();
             return null;
+        }
+    }
+
+    public int count() {
+        StringBuilder sql = new StringBuilder("select count(*) from `").append(_mapping._name).append('`');
+        apply_where(sql);
+        _con.reset_last_error();
+        try (Cursor c = _con.connection.rawQuery(false, sql.toString(), null)) {
+            if (c.moveToFirst())
+                return c.getInt(0);
+            return -1;
+        } catch (Exception e) {
+            _con._last_error = e;
+            e.printStackTrace();
+            return -1;
         }
     }
 
@@ -442,6 +477,7 @@ public class TableQuery<T> {
                 case lte:
                 case lt:
                 case in:
+                case lk:
                     sql.append(condition.build());
                     if (idx < _conditions.size() - 1) { //if this is not the last condition
                         TableCondition next = _conditions.get(idx + 1);
@@ -468,22 +504,14 @@ public class TableQuery<T> {
     }
 
     private void apply_order(StringBuilder sql) {
+
+        if (_order.size() == 0)  //if no ordering is given then do nothing
+            return;
         sql.append(" order by ");
-        if (_order.size() == 0) { //if no ordering is given, order it by primary key
-            for (TableColumn col : _mapping._columns) {
-                if (col.pk)
-                    sql.append('`').append(col.name).append("`,");
-            }
-            if (sql.charAt(sql.length() - 1) != ',') //if there are no primary keys
-                sql.delete(sql.length() - 11, 10); //remove the order by clause
-            else
-                sql.deleteCharAt(sql.length() - 1);
-        } else {
-            for (TableOrder order : _order) {
-                sql.append('`').append(order.field).append('`').append(order.ascending ? " asc " : "desc").append(',');
-            }
-            sql.deleteCharAt(sql.length() - 1);
+        for (TableOrder order : _order) {
+            sql.append('`').append(order.field).append('`').append(order.ascending ? " asc " : " desc ").append(',');
         }
+        sql.deleteCharAt(sql.length() - 1);
     }
 
     private void apply_limit(StringBuilder sql) {
